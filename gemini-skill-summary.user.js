@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Skill «Суть»: видео и статьи
 // @namespace    pavel.youtube-gemini-summary
-// @version      1.1.0
+// @version      1.1.1
 // @description  «Суть видео» on YouTube and «Суть статьи» on any article: opens Gemini, selects the matching Skill and sends the request.
 // @match        *://*/*
 // @grant        GM_setValue
@@ -131,7 +131,7 @@ function initArticle() {
     if (e.altKey && e.shiftKey && e.code === 'KeyS') { e.preventDefault(); summarize(); }
   });
 
-  if (!document.querySelector('article') || getArticleText().length < MIN_ARTICLE_CHARS) return;
+  if ((document.querySelector('article')?.textContent.length || 0) < MIN_ARTICLE_CHARS) return;
   const BTN_ID = 'gemini-article-summary-btn';
   addStyle(`#${BTN_ID}{position:fixed;right:20px;bottom:20px;z-index:2147483646;padding:8px 14px;border:0;border-radius:18px;
     cursor:pointer;font:500 13px/1.2 system-ui,sans-serif;background:#1f1f1f;color:#fff;opacity:.55;box-shadow:0 2px 8px rgba(0,0,0,.3)}
