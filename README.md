@@ -4,7 +4,7 @@ Personal Tampermonkey scripts. Install: open the raw `.user.js` link with Tamper
 
 | Script | What it does |
 |---|---|
-| [gemini-skill-summary](https://raw.githubusercontent.com/pavelpulso/userscripts/main/gemini-skill-summary.user.js) | «Суть видео» button on YouTube → Gemini skill `@youtube-summary`. «Суть статьи» button on article pages (or Alt+Shift+S / Tampermonkey menu anywhere; selected text wins) → page text to `@text-summary`. |
+| [gemini-skill-summary](https://raw.githubusercontent.com/pavelpulso/userscripts/main/gemini-skill-summary.user.js) | «Суть видео» button on YouTube watch page and on every video card (search, subscriptions, channel Videos, sidebar, home) → Gemini skill `@youtube-summary`. «Суть статьи» button on article pages (or Alt+Shift+S / Tampermonkey menu anywhere; selected text wins) → page text to `@text-summary`. |
 
 ## Gemini side notes
 

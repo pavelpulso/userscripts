@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Gemini Skill «Суть»: видео и статьи
 // @namespace    pavel.youtube-gemini-summary
-// @version      1.1.1
-// @description  «Суть видео» on YouTube and «Суть статьи» on any article: opens Gemini, selects the matching Skill and sends the request.
+// @version      1.2.0
+// @description  «Суть видео» on the YouTube watch page and on every video card in feeds, search and sidebar, «Суть статьи» on any article: opens Gemini, selects the matching Skill and sends the request.
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -17,6 +17,7 @@
 
 const VIDEO_SKILL = 'youtube-summary';
 const ARTICLE_SKILL = 'text-summary';
+const WATCH_URL = 'https://www.youtube.com/watch?v=';
 const AUTO_SEND = true;
 const DEBUG = false;
 
@@ -44,6 +45,10 @@ function sendToGemini(skill, prompt) {
   GM_openInTab('https://gemini.google.com/app', { active: true, insert: true });
 }
 
+function summarizeVideo(videoUrl) {
+  sendToGemini(VIDEO_SKILL, `Сделай содержательный разбор этого видео: ${videoUrl}`);
+}
+
 function addStyle(css) {
   const style = document.createElement('style');
   style.textContent = css;
@@ -56,12 +61,14 @@ else initArticle();
 
 function initYouTube() {
   const BTN_ID = 'yt-gemini-summary-btn';
+  const CARD_BTN_CLASS = 'yt-gemini-card-btn';
   addStyle(`
-    #${BTN_ID}{height:40px;padding:0 16px;margin-left:8px;border:0;border-radius:20px;cursor:pointer;
-      font:500 14px/40px Roboto,Arial,sans-serif;white-space:nowrap;flex:none;background:rgba(0,0,0,.05);color:#0f0f0f}
-    #${BTN_ID}:hover{background:rgba(0,0,0,.1)}
-    html[dark] #${BTN_ID}{background:rgba(255,255,255,.1);color:#f1f1f1}
-    html[dark] #${BTN_ID}:hover{background:rgba(255,255,255,.2)}
+    #${BTN_ID},.${CARD_BTN_CLASS}{border:0;cursor:pointer;white-space:nowrap;background:rgba(0,0,0,.05);color:#0f0f0f}
+    #${BTN_ID}:hover,.${CARD_BTN_CLASS}:hover{background:rgba(0,0,0,.1)}
+    html[dark] #${BTN_ID},html[dark] .${CARD_BTN_CLASS}{background:rgba(255,255,255,.1);color:#f1f1f1}
+    html[dark] #${BTN_ID}:hover,html[dark] .${CARD_BTN_CLASS}:hover{background:rgba(255,255,255,.2)}
+    #${BTN_ID}{height:40px;padding:0 16px;margin-left:8px;border-radius:20px;font:500 14px/40px Roboto,Arial,sans-serif;flex:none}
+    .${CARD_BTN_CLASS}{display:block;align-self:flex-start;width:fit-content;height:24px;margin-top:6px;padding:0 10px;border-radius:12px;font:500 12px/24px Roboto,Arial,sans-serif}
     #${BTN_ID}.floating{position:fixed;right:24px;bottom:24px;z-index:2000;margin:0;box-shadow:0 2px 8px rgba(0,0,0,.3)}`);
 
   const btn = document.createElement('button');
@@ -72,7 +79,7 @@ function initYouTube() {
   btn.addEventListener('click', () => {
     const id = new URLSearchParams(location.search).get('v');
     if (!id) return;
-    sendToGemini(VIDEO_SKILL, `Сделай содержательный разбор этого видео: https://www.youtube.com/watch?v=${id}`);
+    summarizeVideo(WATCH_URL + id);
   });
 
   const ROW = 'ytd-watch-metadata #top-level-buttons-computed';
@@ -104,6 +111,64 @@ function initYouTube() {
 
   document.addEventListener('yt-navigate-finish', place);
   place();
+  initFeedButtons();
+
+  function initFeedButtons() {
+    const CARD_TAGS = ['ytd-rich-item-renderer', 'ytd-video-renderer', 'ytd-compact-video-renderer', 'yt-lockup-view-model'];
+    const CARD_SELECTOR = CARD_TAGS.join(', ');
+    const PENDING_CARD_SELECTOR = CARD_TAGS
+      .map((tag) => `${tag}:not(:has(${CARD_SELECTOR})):not(:has(.${CARD_BTN_CLASS}))`)
+      .join(', ');
+    const CARD_SLOT_SELECTOR = '#metadata-line, yt-content-metadata-view-model';
+    const WATCH_LINK_SELECTOR = 'a[href^="/watch?v="]';
+    const VIDEO_ID_RE = /^[\w-]{11}$/;
+    const SCAN_DELAY_MS = 250;
+    let isScanScheduled = false;
+
+    function getCardVideoId(card) {
+      const href = card?.querySelector(WATCH_LINK_SELECTOR)?.getAttribute('href');
+      if (!href) return null;
+      const url = new URL(href, location.origin);
+      if (url.searchParams.has('list')) return null;
+      const id = url.searchParams.get('v');
+      return VIDEO_ID_RE.test(id) ? id : null;
+    }
+
+    function createCardButton() {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = CARD_BTN_CLASS;
+      button.textContent = 'Суть видео';
+      button.title = `Gemini Skill: @${VIDEO_SKILL}`;
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = getCardVideoId(e.currentTarget.closest(CARD_SELECTOR));
+        if (id) summarizeVideo(WATCH_URL + id);
+        else e.currentTarget.remove();
+      });
+      return button;
+    }
+
+    function addCardButtons() {
+      isScanScheduled = false;
+      for (const card of document.querySelectorAll(PENDING_CARD_SELECTOR)) {
+        if (!getCardVideoId(card)) continue;
+        const slot = card.querySelector(CARD_SLOT_SELECTOR);
+        if (slot) slot.after(createCardButton());
+      }
+    }
+
+    function scheduleCardScan() {
+      if (isScanScheduled) return;
+      isScanScheduled = true;
+      setTimeout(addCardButtons, SCAN_DELAY_MS);
+    }
+
+    new MutationObserver(scheduleCardScan).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('yt-navigate-finish', scheduleCardScan);
+    scheduleCardScan();
+  }
 }
 
 function getArticleText() {
